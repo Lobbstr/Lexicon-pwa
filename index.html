@@ -10,47 +10,93 @@
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
            background:#0f172a; color:#e5e7eb; }
-    header { padding:16px 18px; font-weight:700; font-size:18px; background:#111827; border-bottom:1px solid #1f2937; }
-    main { max-width:920px; margin:0 auto; padding:16px; }
+    header { padding:16px 18px; font-weight:700; font-size:18px; background:#111827; border-bottom:1px solid #1f2937;
+             display:flex; justify-content:space-between; align-items:center; }
+    main { max-width:960px; margin:0 auto; padding:16px; }
     .bar { display:flex; gap:8px; margin-bottom:12px; }
     input[type="text"] { flex:1; padding:12px 14px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    button { padding:10px 14px; border-radius:10px; border:1px solid #334155; background:#111827; color:#e5e7eb; }
+    button { padding:10px 14px; border-radius:10px; border:1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer; }
     button:hover { background:#0b1220; }
-    #log { height:460px; overflow:auto; padding:14px; border:1px solid #1f2937; border-radius:12px; background:#0b1220; }
+    #log { height:480px; overflow:auto; padding:14px; border:1px solid #1f2937; border-radius:12px; background:#0b1220; }
     .msg { margin:12px 0; line-height:1.5; }
-    /* Markdown polish */
     .msg h1,.msg h2,.msg h3 { margin:14px 0 8px; line-height:1.2; }
     .msg h3 { font-size:1.05rem; color:#93c5fd; }
     .msg ul { margin:6px 0 10px 1.25em; }
     .msg li { margin:2px 0; }
     .msg strong { color:#e0e7ff; }
-    .msg code { background:#111827; padding:2px 6px; border-radius:6px; border:1px solid #1f2937; }
-    .msg pre { background:#0a0f1e; padding:10px; border-radius:8px; overflow:auto; border:1px solid #1f2937; }
     .tip { margin-top:10px; font-size:12px; color:#94a3b8; }
-    /* Card hover preview */
     #preview { position:absolute; display:none; z-index:50; border:1px solid #1f2937; border-radius:10px; background:#0b1220; padding:6px; }
     #preview img { width:320px; max-width:80vw; border-radius:8px; display:block; }
     .card-inline { color:#93c5fd; cursor:pointer; border-bottom:1px dotted #334155; }
+    .actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    .hidden { display:none; }
+    /* modal */
+    .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.45); }
+    .modal > div { width:min(560px, 92vw); background:#0b1220; border:1px solid #1f2937; border-radius:12px; padding:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    label { font-size:14px; color:#cbd5e1; display:block; margin-bottom:4px; }
+    input[type="number"], select { width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0a1120; color:#e5e7eb; }
   </style>
-  <!-- Lightweight Markdown parser -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-  <header>Lexicon — MTG Pocket Companion</header>
+  <header>
+    <div>Lexicon — MTG Pocket Companion</div>
+    <div class="actions">
+      <button id="settingsBtn" type="button">⚙️ Settings</button>
+      <button id="feedbackBtn" type="button">💬 Feedback</button>
+    </div>
+  </header>
   <main>
     <form id="chatForm" class="bar">
-      <input id="prompt" type="text"
-        placeholder="Talk to Lexicon… (try: Build a UW Gandalf control shell with sections)"
-        autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" />
+      <input id="prompt" type="text" placeholder="Talk to Lexicon… (e.g., Build a UW Gandalf control shell with sections)"
+             autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" />
       <button id="speakBtn" type="button">🎙️ Speak</button>
       <button type="submit">Send</button>
       <button id="clearBtn" type="button">Clear</button>
     </form>
 
     <div id="log"></div>
-    <div class="tip">Tip: any <b>card name</b> in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</div>
+    <div class="actions">
+      <button id="checkBtn" class="hidden" type="button">🔍 Check Legality & Budget</button>
+    </div>
+    <div class="tip">Tip: any <b>card name</b> becomes hover-previewable via Scryfall.</div>
     <div id="preview"><img alt="card preview"></div>
   </main>
+
+  <!-- Settings modal -->
+  <div id="settingsModal" class="modal">
+    <div>
+      <h3 style="margin:0 0 10px;">Settings</h3>
+      <div class="grid">
+        <div>
+          <label for="formatSel">Format</label>
+          <select id="formatSel">
+            <option value="commander">Commander</option>
+            <option value="modern">Modern</option>
+            <option value="pioneer">Pioneer</option>
+            <option value="standard">Standard</option>
+          </select>
+        </div>
+        <div>
+          <label for="budgetUsd">Budget cap (USD)</label>
+          <input id="budgetUsd" type="number" min="0" step="1" placeholder="0 = no cap" />
+        </div>
+        <div>
+          <label for="priceSource">Price source</label>
+          <select id="priceSource">
+            <option value="usd">USD (non-foil)</option>
+            <option value="usd_foil">USD Foil</option>
+            <option value="usd_etched">USD Etched</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+        <button id="closeSettings" type="button">Close</button>
+        <button id="saveSettings" type="button">Save</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
