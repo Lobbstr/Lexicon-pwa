@@ -1,10 +1,10 @@
-// Simple offline cache for core files (v2)
-const CACHE = 'lexicon-cache-v2';
+// Simple offline cache for core files (v3)
+const CACHE = 'lexicon-cache-v3';
 const CORE = [
   './',
-  './index.html',
-  './app.js?v=2',
-  './manifest.webmanifest?v=2',
+  './index.html?v=3',
+  './app.js?v=3',
+  './manifest.webmanifest?v=3',
   './app-icons/icon-192.png',
   './app-icons/icon-512.png'
 ];
