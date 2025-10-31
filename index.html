@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lexicon — MTG Pocket Companion</title>
+  <title>Lexicon — MTG Pocket Companion (v4)</title>
 
-  <link rel="manifest" href="./manifest.webmanifest?v=2">
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest?v=4">
   <meta name="theme-color" content="#0b1220" />
-  <link rel="icon" href="./app-icons/icon-192.png">
+  <link rel="icon" href="./app-icons/icon-192.png" />
 
   <style>
     :root { color-scheme: light dark; --bg:#0b1220; --fg:#e6e8ee; --muted:#8ea0c6; --accent:#5ad1ff; }
@@ -29,11 +30,12 @@
 </head>
 <body>
   <header><h1>Lexicon — MTG Pocket Companion</h1></header>
+
   <main>
     <form id="chatForm" class="row" autocomplete="off">
       <input id="prompt" type="text"
-             placeholder="Talk to Lexicon… (try: Suggest a Gandalf deck with Counterspell, Mystic Sanctuary, Narset's Reversal)"
-             autocapitalize="off" autocorrect="off" spellcheck="false">
+        placeholder="Talk to Lexicon… (try: Suggest a Gandalf deck with Counterspell, Mystic Sanctuary, Narset's Reversal)"
+        autocapitalize="off" autocorrect="off" spellcheck="false" />
       <button id="speakBtn" type="button" title="Voice input">🎙️ Speak</button>
       <button id="sendBtn"  type="submit" title="Send">Send</button>
       <button id="clearBtn" type="button">Clear</button>
@@ -45,60 +47,11 @@
 
   <div class="preview" id="preview"><img alt="Card preview"></div>
 
-  <script src="./app.js?v=2"></script>
+  <script src="./app.js?v=4"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./service-worker.js');
     }
   </script>
 </body>
-</html>             autocapitalize="off" autocorrect="off" spellcheck="false">
-      <button id="speakBtn" type="button" title="Voice input">🎙️ Speak</button>
-      <button id="sendBtn"  type="submit" title="Send">Send</button>
-      <button id="clearBtn" type="button">Clear</button>
-    </form>
-
-    <div class="log" id="log" aria-live="polite"></div>
-    <footer>Tip: any <b>card name</b> in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
-  </main>
-
-  <div class="preview" id="preview"><img alt="Card preview"></div>
-
-  <script src="./app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
-    }
-  </script>
-</body>
-</html>      <button id="clearBtn">Clear</button>
-    </div>
-    <div class="log" id="log" aria-live="polite"></div>
-    <footer>Tip: any <b>card name</b> in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
-  </main>
-
-  <div class="preview" id="preview"><img alt="Card preview"></div>
-
-  <script src="./app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
-    }
-  </script>
-</body>
-</html>      <button id="clearBtn">Clear</button>
-    </div>
-    <div class="log" id="log" aria-live="polite"></div>
-    <footer>Tip: any **card name** in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
-  </main>
-
-  <div class="preview" id="preview"><img alt="Card preview"></div>
-
-  <script src="./app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js');
-    }
-  </script>
-</body>
-</html> 
+</html>
