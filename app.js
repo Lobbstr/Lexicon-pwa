@@ -1,4 +1,4 @@
-// Lexicon vLite UI — Markdown, hover previews, voice, history, settings, legality/budget check (no paid exports)
+// Lexicon vLite UI — now with color-identity validation in the Legality & Budget check
 
 const form = document.getElementById('chatForm');
 const logEl = document.getElementById('log');
@@ -158,12 +158,13 @@ async function showPreviewFor(el) {
   } catch {}
 }
 
-// Legality & budget check (free Scryfall)
+// Legality & budget check + color-identity validation
 checkBtn.onclick = async () => {
   const lastAssist = [...history].reverse().find(m => m.role === 'assistant'); if (!lastAssist) return;
   const parsed = parseDecklist(lastAssist.content); if (!parsed.mainboard.length) return alert('No decklist detected.');
   const names = parsed.mainboard.map(x => x.name);
 
+  // Fetch full card data in batches
   const chunks = []; for (let i = 0; i < names.length; i += 70) chunks.push(names.slice(i, i+70));
   const results = [];
   for (const chunk of chunks) {
@@ -174,23 +175,45 @@ checkBtn.onclick = async () => {
     const data = await r.json(); if (data?.data) results.push(...data.data);
   }
 
+  // Try to detect commander line from the reply for CI locking
+  const commanderLine = lastAssist.content.match(/Commander:\s*([\w’' -]+)\b/i);
+  let ci = [];
+  if (commanderLine && commanderLine[1]) {
+    try {
+      const cr = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(commanderLine[1].trim())}`);
+      const cj = await cr.json(); ci = cj.color_identity || [];
+    } catch {}
+  }
+
   const formatMap = { commander: 'commander', modern:'modern', pioneer:'pioneer', standard:'standard' };
   const fmt = formatMap[settings.format] || 'commander';
-  let illegal = [], total = 0;
-  const priceKey = settings.priceSource || 'usd';
+  let illegal = [], total = 0, ciViolations = [];
 
+  const priceKey = settings.priceSource || 'usd';
   for (const row of results) {
+    // legality
     const legal = row.legalities?.[fmt] || 'not_legal';
     if (!(legal === 'legal' || legal === 'restricted')) illegal.push(row.name);
+
+    // price
     const raw = row.prices?.[priceKey]; const p = raw ? parseFloat(raw) : 0;
     const entry = parsed.mainboard.find(x => x.name.toLowerCase() === row.name.toLowerCase());
     const count = entry ? entry.count : 1;
     total += p * count;
+
+    // color-identity check (only if we detected commander CI)
+    if (ci.length) {
+      const cardCI = row.color_identity || [];
+      const outside = cardCI.some(c => !ci.includes(c));
+      if (outside) ciViolations.push(row.name);
+    }
   }
 
   const overBudget = (settings.budgetUsd && total > settings.budgetUsd);
   let out = `### Legality & Budget Check\n- **Format:** ${settings.format}\n- **Cards:** ${parsed.mainboard.length}\n- **Estimated Total (${priceKey}):** $${total.toFixed(2)} ${overBudget ? '❌ over cap' : '✅ within cap'}`;
   if (illegal.length) out += `\n- **Not legal in ${settings.format}:** ${illegal.slice(0,20).join(', ')}${illegal.length>20?` (+${illegal.length-20} more)`:''}`;
+  if (ci.length) out += `\n- **Commander color identity:** ${ci.join('') || 'colorless'}`;
+  if (ciViolations.length) out += `\n- **❌ Off-color cards detected (violating CI):** ${ciViolations.slice(0,20).join(', ')}${ciViolations.length>20?` (+${ciViolations.length-20} more)`:''}`;
   renderMessage(out);
 };
 
@@ -202,9 +225,7 @@ feedbackBtn.onclick = async () => {
     const r = await fetch(`${PROXY}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note, ua: navigator.userAgent, ts: Date.now() }) });
     const data = await r.json();
     alert(data.ok ? "Thanks! Feedback sent." : `Feedback failed: ${data.error || 'unknown'}`);
-  } catch (e) {
-    alert(`Network error sending feedback: ${e.message}`);
-  }
+  } catch (e) { alert(`Network error sending feedback: ${e.message}`); }
 };
 
 // PWA SW
