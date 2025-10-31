@@ -8,7 +8,7 @@
   <!-- PWA -->
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0b1220" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.85em%22 font-size=%2290%22>🜲</text></svg>">
+  <link rel="icon" href="./app-icons/icon-192.png">
 
   <style>
     :root { color-scheme: light dark; --bg:#0b1220; --fg:#e6e8ee; --muted:#8ea0c6; --accent:#5ad1ff; }
@@ -35,6 +35,21 @@
       <input id="prompt" type="text" placeholder="Talk to Lexicon… (try: Suggest a Gandalf deck with Counterspell, Mystic Sanctuary, Narset's Reversal)">
       <button id="speakBtn" title="Voice input">🎙️ Speak</button>
       <button id="clearBtn">Clear</button>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <footer>Tip: any <b>card name</b> in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
+  </main>
+
+  <div class="preview" id="preview"><img alt="Card preview"></div>
+
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
+</body>
+</html>      <button id="clearBtn">Clear</button>
     </div>
     <div class="log" id="log" aria-live="polite"></div>
     <footer>Tip: any **card name** in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
