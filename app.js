@@ -1,5 +1,4 @@
-// Lexicon MTG Pocket Companion (v3) — Full Script
-// Connected to Cloudflare Worker Proxy
+// Lexicon app (Markdown rendering + card hover), wired to your Worker
 
 const form = document.getElementById('chatForm');
 const logEl = document.getElementById('log');
@@ -9,47 +8,62 @@ const clearBtn = document.getElementById('clearBtn');
 const preview = document.getElementById('preview');
 const previewImg = preview.querySelector('img');
 
-// ✅ Set your Cloudflare Worker endpoint here
+// Your Worker URL:
 const PROXY = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
 
-// Helper: append text to chat log
-function respond(text) {
-  const html = text.replace(
-    /\b([A-Z][A-Za-z'-]{1,30})\b/g,
-    `<span class="card-inline" data-card="$1">$1</span>`
-  );
-  const p = document.createElement('p');
-  p.innerHTML = html;
-  logEl.appendChild(p);
+// Render helper: we let the model speak Markdown, then we convert to HTML.
+function renderMessage(markdownText) {
+  // 1) Convert Markdown → HTML
+  const html = marked.parse(markdownText);
+
+  // 2) Wrap probable card names with spans for hover preview.
+  //    (We do it on the HTML string—simple but effective for most names.)
+  const cardWrapped = html.replace(/\b([A-Z][A-Za-z' -]{1,30})\b/g, (m) => {
+    // Avoid wrapping common English small words
+    const bad = ['The','And','Of','To','In','For','On','At','By','Or','As','If','Be','It','Is','Are','You','Your','A','An'];
+    if (bad.includes(m)) return m;
+    return `<span class="card-inline" data-card="${m}">${m}</span>`;
+  });
+
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = cardWrapped;
+  logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-respond('🧠 Lexicon client ready (v3). Type and press Send.');
+renderMessage('**🧠 Lexicon ready.** Type and press **Send**.');
 
-// Handle user prompt
-async function handleUser(text) {
-  if (!text) return;
-  respond(`You said: ${text}`);
-
+// Ask the proxy (simple CORS: text/plain first, GET fallback)
+async function askAI(prompt) {
   try {
     const r = await fetch(`${PROXY}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: text })
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: prompt
     });
-
     const data = await r.json();
-    if (data.error) {
-      respond(`⚠️ Error: ${data.error}`);
-    } else {
-      respond(data.text);
+    if (data.text) return data.text;
+    return `⚠️ Proxy error: ${data.error || "unknown"}`;
+  } catch (e) {
+    try {
+      const r2 = await fetch(`${PROXY}/chat?prompt=${encodeURIComponent(prompt)}`);
+      const data2 = await r2.json();
+      if (data2.text) return data2.text;
+      return `⚠️ Proxy error: ${data2.error || "unknown"}`;
+    } catch (e2) {
+      return `❌ Network error: ${e2.message}`;
     }
-  } catch (err) {
-    respond(`❌ Network error: ${err.message}`);
   }
 }
 
-// Submit via button or Enter
+async function handleUser(text) {
+  if (!text) return;
+  renderMessage(`*You said:* ${text}`);
+  const reply = await askAI(text);
+  renderMessage(reply);
+}
+
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const v = promptEl.value.trim();
@@ -63,58 +77,37 @@ if ('webkitSpeechRecognition' in window) {
   recognition = new webkitSpeechRecognition();
   recognition.lang = 'en-US';
   recognition.interimResults = false;
-
   recognition.onresult = (e) => {
-    const said = Array.from(e.results).map(r => r[0].transcript).join('');
+    const said = Array.from(e.results).map(r => r[0].transcript).join(' ');
     handleUser(said);
   };
-
-  recognition.onend = () => {
-    recognizing = false;
-    speakBtn.textContent = '🎙️ Speak';
-  };
+  recognition.onend = () => { recognizing = false; speakBtn.textContent = '🎙️ Speak'; };
 }
-
 speakBtn.onclick = () => {
-  if (!recognition) {
-    alert('Voice input not supported in this browser.');
-    return;
-  }
-  if (!recognizing) {
-    recognition.start();
-    recognizing = true;
-    speakBtn.textContent = '🛑 Stop';
-  } else {
-    recognition.stop();
-    recognizing = false;
-    speakBtn.textContent = '🎙️ Speak';
-  }
+  if (!recognition) { alert('Voice input not supported in this browser.'); return; }
+  if (!recognizing) { recognition.start(); recognizing = true; speakBtn.textContent = '🛑 Stop'; }
+  else { recognition.stop(); }
 };
 
-// Clear chat
-clearBtn.onclick = () => (logEl.innerHTML = '');
+// Clear
+clearBtn.onclick = () => { logEl.innerHTML = ''; };
 
-// Hover/tap for card preview
+// --- Card hover/tap preview ---
 let hoverTimeout;
 document.addEventListener('mouseover', (e) => {
-  const el = e.target.closest('.card-inline');
-  if (!el) return;
+  const el = e.target.closest('.card-inline'); if (!el) return;
   clearTimeout(hoverTimeout);
   hoverTimeout = setTimeout(() => showPreviewFor(el), 200);
 });
-
 document.addEventListener('mouseout', (e) => {
   if (e.target.closest('.card-inline')) {
-    clearTimeout(hoverTimeout);
-    preview.style.display = 'none';
+    clearTimeout(hoverTimeout); preview.style.display = 'none';
   }
 });
-
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('.card-inline');
-  if (!el) return;
+  const el = e.target.closest('.card-inline'); if (!el) return;
   await showPreviewFor(el);
-  setTimeout(() => (preview.style.display = 'none'), 5000);
+  setTimeout(() => { preview.style.display = 'none'; }, 5000);
 });
 
 async function showPreviewFor(el) {
@@ -123,7 +116,13 @@ async function showPreviewFor(el) {
     const r = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
     if (!r.ok) return;
     const data = await r.json();
-    previewImg.src = data.image_uris?.normal || data.image_uris?.large || '';
+    const img = data.image_uris?.normal || data.image_uris?.large || data.image_uris?.png
+             || data.card_faces?.[0]?.image_uris?.normal;
+    if (!img) return;
+    previewImg.src = img;
+    const rect = el.getBoundingClientRect();
+    preview.style.left = `${rect.left + window.scrollX}px`;
+    preview.style.top  = `${rect.bottom + 8 + window.scrollY}px`;
     preview.style.display = 'block';
-  } catch (_) {}
+  } catch {}
 }
