@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lexicon — MTG Pocket Companion</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.85em%22 font-size=%2290%22>🜲</text></svg>">
+
+  <style>
+    :root { color-scheme: light dark; --bg:#0b1220; --fg:#e6e8ee; --muted:#8ea0c6; --accent:#5ad1ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:16px 20px; border-bottom:1px solid #1e2a44; position:sticky; top:0; background:rgba(11,18,32,.92); backdrop-filter: blur(6px);}
+    main { max-width:900px; margin:24px auto; padding:0 16px 64px; }
+    h1 { margin:0; font-size:20px; }
+    .row { display:flex; gap:12px; align-items:center; margin:16px 0; flex-wrap:wrap; }
+    input[type=text] { flex:1; padding:12px 14px; border:1px solid #263453; background:#0f1a33; color:var(--fg); border-radius:10px; outline:none; }
+    button { padding:12px 16px; background:#14345a; color:var(--fg); border:1px solid #274a7d; border-radius:10px; cursor:pointer; }
+    button:hover { background:#1a4477; }
+    .log { border:1px solid #1e2a44; background:#0f1a33; border-radius:12px; padding:14px; min-height:180px; }
+    .card-inline { color:var(--accent); text-decoration:underline dotted; cursor:pointer; }
+    .preview { position: fixed; z-index: 9999; display:none; pointer-events:none; background:#0b1220; border:1px solid #1e2a44; border-radius:12px; padding:8px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+    .preview img { width:270px; height:auto; border-radius:8px; display:block; }
+    footer { opacity:.75; font-size:12px; text-align:center; margin-top:24px; }
+  </style>
+</head>
+<body>
+  <header><h1>Lexicon — MTG Pocket Companion</h1></header>
+  <main>
+    <div class="row">
+      <input id="prompt" type="text" placeholder="Talk to Lexicon… (try: Suggest a Gandalf deck with Counterspell, Mystic Sanctuary, Narset's Reversal)">
+      <button id="speakBtn" title="Voice input">🎙️ Speak</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <footer>Tip: any **card name** in the text becomes hover-previewable via Scryfall. Install to your home screen for PWA mode.</footer>
+  </main>
+
+  <div class="preview" id="preview"><img alt="Card preview"></div>
+
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js');
+    }
+  </script>
+</body>
+</html> 
