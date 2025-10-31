@@ -7,20 +7,23 @@
   <link rel="manifest" href="manifest.webmanifest">
   <style>
     :root { color-scheme: dark; }
-    body { margin:0; font-family: system-ui, sans-serif; background:#0f172a; color:#e5e7eb; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+           background:#0f172a; color:#e5e7eb; }
     header { padding:16px 18px; font-weight:700; font-size:18px; background:#111827; border-bottom:1px solid #1f2937; }
-    main { max-width:900px; margin:0 auto; padding:16px; }
+    main { max-width:920px; margin:0 auto; padding:16px; }
     .bar { display:flex; gap:8px; margin-bottom:12px; }
     input[type="text"] { flex:1; padding:12px 14px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
     button { padding:10px 14px; border-radius:10px; border:1px solid #334155; background:#111827; color:#e5e7eb; }
     button:hover { background:#0b1220; }
-    #log { height:420px; overflow:auto; padding:12px; border:1px solid #1f2937; border-radius:12px; background:#0b1220; }
-    .msg { margin:10px 0; line-height:1.45; }
+    #log { height:460px; overflow:auto; padding:14px; border:1px solid #1f2937; border-radius:12px; background:#0b1220; }
+    .msg { margin:12px 0; line-height:1.5; }
     /* Markdown polish */
     .msg h1,.msg h2,.msg h3 { margin:14px 0 8px; line-height:1.2; }
-    .msg h3 { font-size:16px; color:#c7d2fe; }
-    .msg ul { margin:6px 0 10px 20px; }
+    .msg h3 { font-size:1.05rem; color:#93c5fd; }
+    .msg ul { margin:6px 0 10px 1.25em; }
     .msg li { margin:2px 0; }
+    .msg strong { color:#e0e7ff; }
     .msg code { background:#111827; padding:2px 6px; border-radius:6px; border:1px solid #1f2937; }
     .msg pre { background:#0a0f1e; padding:10px; border-radius:8px; overflow:auto; border:1px solid #1f2937; }
     .tip { margin-top:10px; font-size:12px; color:#94a3b8; }
@@ -36,7 +39,9 @@
   <header>Lexicon — MTG Pocket Companion</header>
   <main>
     <form id="chatForm" class="bar">
-      <input id="prompt" type="text" placeholder="Talk to Lexicon… (try: Suggest a Gandalf deck with Counterspell, Mystic Sanctuary…)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" />
+      <input id="prompt" type="text"
+        placeholder="Talk to Lexicon… (try: Build a UW Gandalf control shell with sections)"
+        autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" />
       <button id="speakBtn" type="button">🎙️ Speak</button>
       <button type="submit">Send</button>
       <button id="clearBtn" type="button">Clear</button>
