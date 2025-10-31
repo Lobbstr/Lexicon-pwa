@@ -11,23 +11,20 @@ const previewImg = preview.querySelector('img');
 // Your Worker URL:
 const PROXY = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
 
-// Render helper: we let the model speak Markdown, then we convert to HTML.
+// Markdown renderer (breaks=true gives nicer paragraph spacing)
 function renderMessage(markdownText) {
-  // 1) Convert Markdown → HTML
-  const html = marked.parse(markdownText);
+  const htmlRaw = marked.parse(markdownText, { gfm: true, breaks: true });
 
-  // 2) Wrap probable card names with spans for hover preview.
-  //    (We do it on the HTML string—simple but effective for most names.)
-  const cardWrapped = html.replace(/\b([A-Z][A-Za-z' -]{1,30})\b/g, (m) => {
-    // Avoid wrapping common English small words
-    const bad = ['The','And','Of','To','In','For','On','At','By','Or','As','If','Be','It','Is','Are','You','Your','A','An'];
-    if (bad.includes(m)) return m;
+  // Wrap likely card names with spans for hover preview
+  const html = htmlRaw.replace(/\b([A-Z][A-Za-z' -]{1,30})\b/g, (m) => {
+    const common = new Set(['The','And','Of','To','In','For','On','At','By','Or','As','If','Be','It','Is','Are','You','Your','A','An','With','From','This','That','These','Those']);
+    if (common.has(m)) return m;
     return `<span class="card-inline" data-card="${m}">${m}</span>`;
   });
 
   const div = document.createElement('div');
   div.className = 'msg';
-  div.innerHTML = cardWrapped;
+  div.innerHTML = html;
   logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
 }
