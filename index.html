@@ -180,6 +180,113 @@
 })();
 </script>
 <!-- === END CHAT WIDGET === -->
+<script>
+/* === LEXICON BRIDGE: keep your UI, swap the backend === */
+(function () {
+  // 0) Prevent “vanishing text” (form reloads) universally
+  document.addEventListener("submit", function (e) {
+    const form = e.target;
+    // If the form belongs to the chat area, block full page reload
+    if (form && (form.matches("[data-chat-form]") || form.closest("#app") || form.closest("[data-chat]"))) {
+      e.preventDefault();
+    }
+  }, true);
+
+  // 1) Where to send chat now
+  const WORKER_CHAT = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev/chat";
+
+  // 2) Session id for short-term memory in KV
+  const sessionId = (function () {
+    try {
+      const k = "lex_session";
+      const v = localStorage.getItem(k) || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+      localStorage.setItem(k, v);
+      return v;
+    } catch { return String(Date.now()); }
+  })();
+
+  // 3) Save native fetch
+  const _fetch = window.fetch.bind(window);
+
+  // 4) Wrap fetch so any call to OpenAI or "/chat" goes to the Worker
+  window.fetch = async function (input, init) {
+    try {
+      let url = (typeof input === "string") ? input : input.url;
+      const isOpenAI = url.includes("api.openai.com");
+      const isChatPath = /(^\/chat$|\/chat\?|\/api\/chat)/.test(url) || url.endsWith("/chat");
+
+      if (isOpenAI || isChatPath) {
+        // Normalize init
+        init = init || {};
+        init.method = "POST";
+        init.headers = Object.assign({}, init.headers || {}, { "content-type": "application/json" });
+
+        // Parse incoming body (support both {prompt} and {messages})
+        let body = {};
+        if (init.body) {
+          try { body = typeof init.body === "string" ? JSON.parse(init.body) : init.body; }
+          catch { body = { prompt: String(init.body) }; }
+        }
+
+        // If the UI sent {prompt: "..."} convert to Chat messages
+        if (body.prompt && !body.messages) {
+          body.messages = [{ role: "user", content: body.prompt }];
+        }
+        if (!Array.isArray(body.messages)) {
+          body.messages = [];
+        }
+
+        // Build the Worker request
+        const workerInit = {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            messages: body.messages,
+            temperature: body.temperature,
+            max_tokens: body.max_tokens
+          })
+        };
+
+        // Call the Worker
+        const workerResp = await _fetch(WORKER_CHAT, workerInit);
+
+        // If the UI expects raw OpenAI shape, adapt it
+        // Our worker returns: { ok, message, usage, model }
+        // We convert to: { choices: [{ message: { content } }], usage, model }
+        const clone = workerResp.clone();
+        let adapted = null;
+        try {
+          const data = await clone.json();
+          if (data && typeof data === "object" && ("ok" in data)) {
+            const content = data.message || "";
+            const openAiLike = {
+              id: "lexprox_" + Date.now(),
+              object: "chat.completion",
+              created: Math.floor(Date.now()/1000),
+              model: data.model || "gpt-4o-mini",
+              choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }],
+              usage: data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+            };
+            adapted = new Response(JSON.stringify(openAiLike), {
+              status: workerResp.status,
+              headers: { "content-type": "application/json" }
+            });
+          }
+        } catch (_) { /* fall back to original */ }
+
+        return adapted || workerResp;
+      }
+
+      // Non-chat requests go through unchanged
+      return _fetch(input, init);
+    } catch (e) {
+      // If anything goes wrong, fall back to native fetch
+      return _fetch(input, init);
+    }
+  };
+})();
+</script>
 
 </body>
 </html>
