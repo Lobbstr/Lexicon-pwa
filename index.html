@@ -18,9 +18,20 @@
       display:flex; justify-content:space-between; align-items:center;
     }
     main { max-width:960px; margin:0 auto; padding:16px; }
-    .bar { display:flex; gap:8px; margin-bottom:12px; }
-    input[type="text"] {
-      flex:1; padding:12px 14px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#ffffff;
+    .bar { display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; }
+    textarea#prompt {
+      flex:1;
+      min-height:120px;         /* taller to start */
+      max-height:60vh;          /* comfortable limit on phone */
+      padding:12px 14px;
+      border-radius:10px;
+      border:1px solid #334155;
+      background:#0b1220;
+      color:#ffffff;
+      resize:none;               /* we auto-size instead */
+      line-height:1.5;
+      white-space:pre-wrap;      /* show deck lists with line breaks */
+      overflow:auto;             /* infinite scroll as content grows */
     }
     button {
       padding:10px 14px; border-radius:10px; border:1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer;
@@ -45,7 +56,7 @@
     }
     #preview img { width:320px; max-width:80vw; border-radius:8px; display:block; }
     .card-inline {
-      color:#f3f4f6;              /* slightly off-white to hint interactivity */
+      color:#f3f4f6;              /* slightly off-white for hover-able */
       cursor:pointer;
       border-bottom:1px dotted #334155;
       transition:filter .12s ease;
@@ -62,7 +73,6 @@
       width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0a1120; color:#e5e7eb;
     }
   </style>
-  <!-- Markdown renderer for headers/bullets/etc. -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -75,14 +85,16 @@
   </header>
 
   <main>
-    <!-- Your original chat box -->
+    <!-- Chat bar with multi-line, auto-expanding textarea -->
     <form id="chatForm" class="bar">
-      <input id="prompt" type="text"
-             placeholder="Talk to Lexicon… (e.g., Build a UW Gandalf control shell with sections)"
-             autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" />
-      <button id="speakBtn" type="button">🎙️ Speak</button>
-      <button id="sendBtn" type="submit">Send</button>
-      <button id="clearBtn" type="button">Clear</button>
+      <textarea id="prompt"
+        placeholder="Talk to Lexicon… (paste a deck list — line breaks will be preserved)"
+        autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch;">
+        <button id="speakBtn" type="button">🎙️</button>
+        <button id="sendBtn" type="submit">Send</button>
+        <button id="clearBtn" type="button">Clear</button>
+      </div>
     </form>
 
     <div id="log" aria-live="polite"></div>
@@ -91,11 +103,11 @@
       <button id="checkBtn" class="hidden" type="button">🔍 Check Legality & Budget</button>
     </div>
 
-    <div class="tip">Tip: type naturally — card names are auto-detected for hover preview (no brackets needed). Try Sol Ring, Lightning Bolt, or Teferi, Hero of Dominaria.</div>
+    <div class="tip">Tip: paste decklists with line breaks; output uses headings & bullets. Card names are auto-detected for hover.</div>
     <div id="preview"><img alt="card preview"></div>
   </main>
 
-  <!-- Settings modal -->
+  <!-- Settings modal (unchanged) -->
   <div id="settingsModal" class="modal">
     <div>
       <h3 style="margin:0 0 10px;">Settings</h3>
@@ -129,10 +141,10 @@
     </div>
   </div>
 
-  <!-- (Keep any site JS you already use) -->
+  <!-- Optional site JS -->
   <script src="app.js"></script>
 
-  <!-- === Lexicon: direct wiring to your Cloudflare Worker, with auto card linking & styled names === -->
+  <!-- Wiring to Worker + Markdown + hover linking + auto-expanding textarea -->
   <script>
   (function () {
     const API = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
@@ -143,7 +155,15 @@
     const preview = document.getElementById("preview");
     const previewImg = preview.querySelector("img");
 
-    // stable session for KV memory
+    // Auto-expand textarea as user types/pastes (infinite feel)
+    function autosize() {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.6) + "px";
+    }
+    input.addEventListener("input", autosize);
+    window.addEventListener("resize", autosize);
+    setTimeout(autosize, 0);
+
     const sessionId = (() => {
       try {
         const k = "lex_session";
@@ -153,13 +173,13 @@
       } catch { return String(Date.now()); }
     })();
 
-    // prevent full page reload on submit
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const text = (input.value || "").trim();
       if (!text) return;
       input.value = "";
-      appendMessage("You", escapeHTML(text));
+      autosize();
+      appendMessage("You", text, true);
       sendToWorker(text);
     });
 
@@ -169,7 +189,7 @@
       return String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
     }
 
-    // ------- Markdown rendering + auto card linking (no brackets required) -------
+    // Render with Markdown; then auto-link card names (no brackets required)
     function renderMarkdown(md) {
       const html = marked.parse(md || "", { breaks: true, gfm: true });
       const container = document.createElement("div");
@@ -178,17 +198,15 @@
       return container.innerHTML;
     }
 
-    // Cache card existence & image URLs to reduce lookups
-    const cardCache = new Map();  // name -> {exists:boolean, img?:string}
+    const cardCache = new Map(); // name -> {exists, img?}
 
-    // Validate a candidate with Scryfall via the Worker; prefer exact match (!"...")
     async function validateCardName(name) {
       const key = name.toLowerCase();
       if (cardCache.has(key)) return cardCache.get(key);
       try {
         const res = await fetch(`${API}/scryfall?q=${encodeURIComponent('!"' + name + '"')}`);
         const data = await res.json();
-        const card = (data && data.data && data.data[0]) || data;
+        const card = (data?.data && data.data[0]) || data;
         const img = card?.image_uris?.normal || card?.image_uris?.large ||
                     (card?.card_faces && card.card_faces[0]?.image_uris?.normal) || null;
         const exists = !!(card && (card.name || card.object === "card"));
@@ -202,9 +220,7 @@
       }
     }
 
-    // Turn likely card names into <span class="card-inline" data-card="...">…</span>
     function autoLinkCardNames(rootEl) {
-      // Walk text nodes (skip code/pre/script/style)
       const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -218,76 +234,55 @@
       const textNodes = [];
       while (walker.nextNode()) textNodes.push(walker.currentNode);
 
-      // For each text node, find candidate Title-Case phrases up to 4 words
-      const MAX_VALIDATIONS = 12; // cap per message to keep it snappy
-      let validationsLeft = MAX_VALIDATIONS;
-
+      const MAX_VALID = 12;
       textNodes.forEach(async node => {
-        if (validationsLeft <= 0) return;
+        let validationsLeft = MAX_VALID;
         const text = node.nodeValue;
-        // Split into tokens (keep punctuation)
         const tokens = text.split(/(\s+|[.,;:!?()–—-])/);
-
-        // Build n-grams (4→1 words) that look like card names (Title Case, allow apostrophes/hyphens/commas)
-        // We'll progressively validate and replace in-place.
-        // Mark which token indexes are already used to avoid overlap.
-        const used = new Array(tokens.length).fill(false);
 
         async function tryRange(start, len) {
           if (validationsLeft <= 0) return false;
-          // Join only "word" tokens (skip when token is pure whitespace/punct)
           const slice = tokens.slice(start, start + len);
           const raw = slice.join("");
           const clean = raw.trim();
           if (!clean) return false;
 
-          // Quick heuristic: begins with capital letter, contains at least one letter, not all-caps
           if (!/^[A-Z]/.test(clean)) return false;
           if (!/[A-Za-z]/.test(clean)) return false;
           if (/^[A-Z0-9\s\-,'’:!]+$/.test(clean) && clean === clean.toUpperCase()) return false;
 
-          // Avoid obvious non-cards (short common words)
           const stop = ["The","And","Or","Of","To","For","With","A","An","At","In","On","By","As","It","This","That","You","Your","Phase","Combat","Main","End","Step","Turn"];
           if (len === 1 && stop.includes(clean)) return false;
 
-          // Validate via Scryfall
           validationsLeft--;
           const info = await validateCardName(clean);
           if (!info.exists) return false;
 
-          // Wrap in span
           const span = document.createElement("span");
           span.className = "card-inline";
           span.setAttribute("data-card", clean);
           span.textContent = clean;
 
-          // Rebuild node content around the matched range
           const before = document.createTextNode(tokens.slice(0, start).join(""));
           const after  = document.createTextNode(tokens.slice(start + len).join(""));
           const parent = node.parentNode;
-
           const frag = document.createDocumentFragment();
           frag.appendChild(before);
           frag.appendChild(span);
           frag.appendChild(after);
           parent.replaceChild(frag, node);
 
-          // Enable hovers immediately for this span
           enableCardHovers(parent);
-
           return true;
         }
 
-        // Try longer phrases first, left to right
         (async () => {
           for (let i = 0; i < tokens.length; i++) {
             if (/\s+|[.,;:!?()–—-]/.test(tokens[i] || "")) continue;
-            // Try 4..1-word spans
-            for (let len = 7; len >= 1; len--) { // token-based (includes punctuation slots), aggressive window
+            for (let len = 7; len >= 1; len--) {
               if (i + len > tokens.length) continue;
-              // crude word count in the span
-              const wordCount = tokens.slice(i, i + len).filter(t => t && !/\s+|[.,;:!?()–—-]/.test(t)).length;
-              if (wordCount < 1 || wordCount > 4) continue;
+              const words = tokens.slice(i, i + len).filter(t => t && !/\s+|[.,;:!?()–—-]/.test(t)).length;
+              if (words < 1 || words > 4) continue;
               const replaced = await tryRange(i, len);
               if (replaced || validationsLeft <= 0) return;
             }
@@ -296,47 +291,44 @@
       });
     }
 
-    // Append a message block with colored names
-    function appendMessage(who, contentMarkdown) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "msg";
+    function appendMessage(who, text, isUser = false) {
+      const wrap = document.createElement("div");
+      wrap.className = "msg";
 
-      const nameEl = document.createElement("div");
-      nameEl.className = "name " + (who === "Lexicon" ? "lexicon" : who === "You" ? "you" : "");
-      nameEl.textContent = who;
+      const name = document.createElement("div");
+      name.className = "name " + (who === "Lexicon" ? "lexicon" : who === "You" ? "you" : "");
+      name.textContent = who;
 
-      const bodyEl = document.createElement("div");
-      bodyEl.className = "body";
-      if (who === "You") {
-        bodyEl.innerHTML = "<p>" + contentMarkdown + "</p>";
+      const body = document.createElement("div");
+      body.className = "body";
+      if (isUser) {
+        // Preserve line breaks for pasted decklists
+        body.innerHTML = "<div style='white-space:pre-wrap'>" + escapeHTML(text) + "</div>";
       } else {
-        bodyEl.innerHTML = renderMarkdown(contentMarkdown);
+        body.innerHTML = renderMarkdown(text);
       }
 
-      wrapper.appendChild(nameEl);
-      wrapper.appendChild(bodyEl);
-      log.appendChild(wrapper);
+      wrap.appendChild(name);
+      wrap.appendChild(body);
+      log.appendChild(wrap);
       log.scrollTop = log.scrollHeight;
-
-      // Enable hover on any newly linked cards
-      enableCardHovers(bodyEl);
+      enableCardHovers(body);
     }
 
-    // Hover preview using Worker /scryfall (no CORS issues)
     async function loadCardImage(name) {
       const key = name.toLowerCase();
-      if (cardCache.has(key) && cardCache.get(key).img) return cardCache.get(key).img;
+      const cached = cardCache.get(key);
+      if (cached?.img) return cached.img;
       const info = await validateCardName(name);
       return info.img || null;
     }
 
     function enableCardHovers(root) {
       root.querySelectorAll(".card-inline[data-card]").forEach(span => {
-        if (span.__hoverBound) return; // avoid rebinding
+        if (span.__hoverBound) return;
         span.__hoverBound = true;
 
         let active = false;
-
         const move = (ev) => {
           const pad = 12;
           const x = Math.min(window.innerWidth - 340, ev.clientX + pad);
@@ -372,7 +364,6 @@
       });
     }
 
-    // Send to Worker and render reply
     async function sendToWorker(text) {
       try {
         const res = await fetch(API + "/chat", {
@@ -383,7 +374,6 @@
             messages: [{ role: "user", content: text }]
           })
         });
-
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
           const msg = data && (data.error || data.text) ? `${data.error || data.text}` : `HTTP ${res.status}`;
@@ -396,7 +386,7 @@
       }
     }
 
-    // Optional health note
+    // Optional: quick health note
     (async () => {
       try {
         const h = await fetch(API + "/health").then(r => r.json());
@@ -405,7 +395,6 @@
         appendMessage("System", "Cannot reach backend right now.");
       }
     })();
-
   })();
   </script>
 </body>
