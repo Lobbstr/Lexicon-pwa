@@ -19,27 +19,32 @@
     }
     main { max-width:960px; margin:0 auto; padding:16px; }
     .bar { display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; }
+
+    /* Scrollable, taller textarea (no infinite growth) */
     textarea#prompt {
       flex:1;
-      min-height:120px;         /* taller to start */
-      max-height:60vh;          /* comfortable limit on phone */
+      height:160px;              /* comfortable default height */
+      max-height:50vh;           /* never exceeds half the screen */
       padding:12px 14px;
       border-radius:10px;
       border:1px solid #334155;
       background:#0b1220;
       color:#ffffff;
-      resize:none;               /* we auto-size instead */
+      resize:vertical;           /* allow manual resize if desired */
       line-height:1.5;
-      white-space:pre-wrap;      /* show deck lists with line breaks */
-      overflow:auto;             /* infinite scroll as content grows */
+      white-space:pre-wrap;      /* preserve decklist line breaks */
+      overflow:auto;             /* scroll inside when content is long */
     }
+
     button {
       padding:10px 14px; border-radius:10px; border:1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer;
     }
     button:hover { background:#0b1220; }
+
     #log {
       height:480px; overflow:auto; padding:14px; border:1px solid #1f2937; border-radius:12px; background:#0b1220;
     }
+
     .msg { margin:12px 0; line-height:1.6; }
     .name { font-size:.9rem; margin-bottom:4px; }
     .name.lexicon { color:#4b5563; } /* dark grey */
@@ -49,22 +54,54 @@
     .msg ul { margin:6px 0 10px 1.25em; }
     .msg li { margin:2px 0; }
     .msg strong { color:#e0e7ff; }
+
     .tip { margin-top:10px; font-size:12px; color:#94a3b8; }
+
     #preview {
       position:absolute; display:none; z-index:50; border:1px solid #1f2937; border-radius:10px; background:#0b1220; padding:6px;
       box-shadow: 0 10px 30px rgba(0,0,0,.45);
     }
     #preview img { width:320px; max-width:80vw; border-radius:8px; display:block; }
+
     .card-inline {
-      color:#f3f4f6;              /* slightly off-white for hover-able */
+      color:#f3f4f6;              /* slightly off-white (interactive hint) */
       cursor:pointer;
       border-bottom:1px dotted #334155;
       transition:filter .12s ease;
     }
     .card-inline:hover { filter:brightness(1.08); }
+
     .actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
     .hidden { display:none; }
-    /* modal */
+
+    /* Thinking animation */
+    .thinking {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:#94a3b8;
+      font-size:0.95rem;
+    }
+    .dots {
+      display:inline-flex;
+      gap:4px;
+    }
+    .dot {
+      width:6px;
+      height:6px;
+      border-radius:50%;
+      background:#94a3b8;
+      opacity:0.3;
+      animation: pulse 1s infinite ease-in-out;
+    }
+    .dot:nth-child(2) { animation-delay: .15s; }
+    .dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes pulse {
+      0%, 60%, 100% { opacity:0.3; transform:translateY(0) }
+      30% { opacity:1; transform:translateY(-2px) }
+    }
+
+    /* modal (kept) */
     .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.45); }
     .modal > div { width:min(560px, 92vw); background:#0b1220; border:1px solid #1f2937; border-radius:12px; padding:16px; }
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
@@ -85,13 +122,12 @@
   </header>
 
   <main>
-    <!-- Chat bar with multi-line, auto-expanding textarea -->
+    <!-- Clean chat bar: NO speaker icon -->
     <form id="chatForm" class="bar">
       <textarea id="prompt"
         placeholder="Talk to Lexicon… (paste a deck list — line breaks will be preserved)"
         autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
       <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch;">
-        <button id="speakBtn" type="button">🎙️</button>
         <button id="sendBtn" type="submit">Send</button>
         <button id="clearBtn" type="button">Clear</button>
       </div>
@@ -144,7 +180,7 @@
   <!-- Optional site JS -->
   <script src="app.js"></script>
 
-  <!-- Wiring to Worker + Markdown + hover linking + auto-expanding textarea -->
+  <!-- Wiring: Worker chat + Markdown + auto card linking + hover previews + thinking animation -->
   <script>
   (function () {
     const API = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
@@ -153,16 +189,6 @@
     const log = document.getElementById("log");
     const clearBtn = document.getElementById("clearBtn");
     const preview = document.getElementById("preview");
-    const previewImg = preview.querySelector("img");
-
-    // Auto-expand textarea as user types/pastes (infinite feel)
-    function autosize() {
-      input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.6) + "px";
-    }
-    input.addEventListener("input", autosize);
-    window.addEventListener("resize", autosize);
-    setTimeout(autosize, 0);
 
     const sessionId = (() => {
       try {
@@ -178,9 +204,9 @@
       const text = (input.value || "").trim();
       if (!text) return;
       input.value = "";
-      autosize();
+      const placeholder = appendThinking();
       appendMessage("You", text, true);
-      sendToWorker(text);
+      sendToWorker(text, placeholder);
     });
 
     clearBtn.addEventListener("click", () => { log.innerHTML = ""; });
@@ -189,7 +215,7 @@
       return String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
     }
 
-    // Render with Markdown; then auto-link card names (no brackets required)
+    // Render Markdown then auto-link card names
     function renderMarkdown(md) {
       const html = marked.parse(md || "", { breaks: true, gfm: true });
       const container = document.createElement("div");
@@ -198,6 +224,62 @@
       return container.innerHTML;
     }
 
+    // --- Thinking UI ---
+    function appendThinking() {
+      const wrap = document.createElement("div");
+      wrap.className = "msg";
+      const name = document.createElement("div");
+      name.className = "name lexicon";
+      name.textContent = "Lexicon";
+      const body = document.createElement("div");
+      body.className = "body";
+      body.innerHTML = `
+        <div class="thinking">
+          thinking
+          <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+        </div>`;
+      wrap.appendChild(name);
+      wrap.appendChild(body);
+      log.appendChild(wrap);
+      log.scrollTop = log.scrollHeight;
+      return wrap; // we'll replace this later
+    }
+
+    function replaceThinking(placeholderEl, markdown) {
+      if (!placeholderEl) return appendMessage("Lexicon", markdown);
+      const body = placeholderEl.querySelector(".body");
+      if (!body) return appendMessage("Lexicon", markdown);
+      body.innerHTML = renderMarkdown(markdown);
+      enableCardHovers(body);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // --- Messages ---
+    function appendMessage(who, text, isUser = false) {
+      const wrap = document.createElement("div");
+      wrap.className = "msg";
+
+      const name = document.createElement("div");
+      name.className = "name " + (who === "Lexicon" ? "lexicon" : who === "You" ? "you" : "");
+      name.textContent = who;
+
+      const body = document.createElement("div");
+      body.className = "body";
+      if (isUser) {
+        body.innerHTML = "<div style='white-space:pre-wrap'>" + escapeHTML(text) + "</div>";
+      } else {
+        body.innerHTML = renderMarkdown(text);
+      }
+
+      wrap.appendChild(name);
+      wrap.appendChild(body);
+      log.appendChild(wrap);
+      log.scrollTop = log.scrollHeight;
+      enableCardHovers(body);
+      return wrap;
+    }
+
+    // --- Card hover (Scryfall) ---
     const cardCache = new Map(); // name -> {exists, img?}
 
     async function validateCardName(name) {
@@ -291,30 +373,6 @@
       });
     }
 
-    function appendMessage(who, text, isUser = false) {
-      const wrap = document.createElement("div");
-      wrap.className = "msg";
-
-      const name = document.createElement("div");
-      name.className = "name " + (who === "Lexicon" ? "lexicon" : who === "You" ? "you" : "");
-      name.textContent = who;
-
-      const body = document.createElement("div");
-      body.className = "body";
-      if (isUser) {
-        // Preserve line breaks for pasted decklists
-        body.innerHTML = "<div style='white-space:pre-wrap'>" + escapeHTML(text) + "</div>";
-      } else {
-        body.innerHTML = renderMarkdown(text);
-      }
-
-      wrap.appendChild(name);
-      wrap.appendChild(body);
-      log.appendChild(wrap);
-      log.scrollTop = log.scrollHeight;
-      enableCardHovers(body);
-    }
-
     async function loadCardImage(name) {
       const key = name.toLowerCase();
       const cached = cardCache.get(key);
@@ -324,6 +382,7 @@
     }
 
     function enableCardHovers(root) {
+      const preview = document.getElementById("preview");
       root.querySelectorAll(".card-inline[data-card]").forEach(span => {
         if (span.__hoverBound) return;
         span.__hoverBound = true;
@@ -364,7 +423,8 @@
       });
     }
 
-    async function sendToWorker(text) {
+    // --- Wire to Worker ---
+    async function sendToWorker(text, placeholderEl) {
       try {
         const res = await fetch(API + "/chat", {
           method: "POST",
@@ -377,23 +437,20 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
           const msg = data && (data.error || data.text) ? `${data.error || data.text}` : `HTTP ${res.status}`;
-          appendMessage("System", `**Error:** ${msg}`);
+          replaceThinking(placeholderEl, `**Error:** ${msg}`);
           return;
         }
-        appendMessage("Lexicon", data.message || "(no content)");
+        replaceThinking(placeholderEl, data.message || "(no content)");
       } catch (e) {
-        appendMessage("System", `**Network error:** ${e}`);
+        replaceThinking(placeholderEl, `**Network error:** ${e}`);
       }
     }
 
-    // Optional: quick health note
+    // Optional: quick health ping
     (async () => {
       try {
-        const h = await fetch(API + "/health").then(r => r.json());
-        if (!h.ok) appendMessage("System", "Backend issue. Try again shortly.");
-      } catch {
-        appendMessage("System", "Cannot reach backend right now.");
-      }
+        await fetch(API + "/health").then(r => r.json());
+      } catch {}
     })();
   })();
   </script>
