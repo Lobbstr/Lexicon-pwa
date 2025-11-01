@@ -99,5 +99,87 @@
   </div>
 
   <script src="app.js"></script>
+  <!-- === LEXICON CHAT WIDGET (Copy-Paste Only) === -->
+<div id="lex-chat" style="max-width:700px;margin:20px auto;font-family:sans-serif">
+  <h3>Lexicon Chat</h3>
+  <div id="lex-log" style="height:260px;overflow:auto;border:1px solid #ddd;padding:10px;border-radius:8px;white-space:pre-wrap;background:#fff"></div>
+  <div style="margin-top:8px;display:flex;gap:8px">
+    <input id="lex-msg" placeholder="Type a message…" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:6px" />
+    <button id="lex-send" type="button" style="padding:8px 14px;border:0;border-radius:6px;background:#4f46e5;color:white">Send</button>
+  </div>
+  <div id="lex-status" style="margin-top:6px;color:#666;font-size:12px"></div>
+</div>
+
+<script>
+(() => {
+  // where your chat messages go
+  const API = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
+  const log = document.getElementById("lex-log");
+  const msg = document.getElementById("lex-msg");
+  const send = document.getElementById("lex-send");
+  const statusEl = document.getElementById("lex-status");
+  const sessionId = localStorage.getItem("lex_session") || (crypto.randomUUID?.() || String(Date.now()));
+  localStorage.setItem("lex_session", sessionId);
+
+  function append(who, text) {
+    const time = new Date().toLocaleTimeString();
+    log.textContent += `[${time}] ${who}: ${text}\n\n`;
+    log.scrollTop = log.scrollHeight;
+  }
+  function setStatus(t){ statusEl.textContent = t; }
+
+  // check if the backend works
+  fetch(`${API}/health`).then(r=>r.json()).then(h=>{
+    setStatus(h.ok ? "Backend ready." : "Backend issue.");
+  }).catch(()=>setStatus("Cannot reach backend."));
+
+  async function sendChat(text) {
+    append("You", text);
+    setStatus("Sending…");
+    send.disabled = true;
+
+    try {
+      const res = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          messages: [{ role: "user", content: text }]
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        append("System", `Error ${res.status}: ${data.error || data.text || "Unknown"}`);
+      } else {
+        append("Lexicon", data.message || "(no content)");
+      }
+    } catch (e) {
+      append("System", "Network error: " + e);
+    } finally {
+      setStatus("");
+      send.disabled = false;
+    }
+  }
+
+  // when you click Send
+  send.addEventListener("click", () => {
+    const text = msg.value.trim();
+    if (!text) return;
+    msg.value = "";
+    sendChat(text);
+  });
+
+  // also send when you press Enter
+  msg.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      send.click();
+    }
+  });
+})();
+</script>
+<!-- === END CHAT WIDGET === -->
+
 </body>
 </html>
