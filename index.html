@@ -23,17 +23,17 @@
     /* Scrollable, taller textarea (no infinite growth) */
     textarea#prompt {
       flex:1;
-      height:160px;              /* comfortable default height */
-      max-height:50vh;           /* never exceeds half the screen */
+      height:160px;
+      max-height:50vh;
       padding:12px 14px;
       border-radius:10px;
       border:1px solid #334155;
       background:#0b1220;
       color:#ffffff;
-      resize:vertical;           /* allow manual resize if desired */
+      resize:vertical;
       line-height:1.5;
-      white-space:pre-wrap;      /* preserve decklist line breaks */
-      overflow:auto;             /* scroll inside when content is long */
+      white-space:pre-wrap;
+      overflow:auto;
     }
 
     button {
@@ -82,32 +82,17 @@
       color:#94a3b8;
       font-size:0.95rem;
     }
-    .dots {
-      display:inline-flex;
-      gap:4px;
-    }
+    .dots { display:inline-flex; gap:4px; }
     .dot {
-      width:6px;
-      height:6px;
-      border-radius:50%;
-      background:#94a3b8;
-      opacity:0.3;
-      animation: pulse 1s infinite ease-in-out;
+      width:6px; height:6px; border-radius:50%;
+      background:#94a3b8; opacity:0.3;
+      animation:pulse 1s infinite ease-in-out;
     }
-    .dot:nth-child(2) { animation-delay: .15s; }
-    .dot:nth-child(3) { animation-delay: .3s; }
-    @keyframes pulse {
-      0%, 60%, 100% { opacity:0.3; transform:translateY(0) }
-      30% { opacity:1; transform:translateY(-2px) }
-    }
-
-    /* modal (kept) */
-    .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.45); }
-    .modal > div { width:min(560px, 92vw); background:#0b1220; border:1px solid #1f2937; border-radius:12px; padding:16px; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-    label { font-size:14px; color:#cbd5e1; display:block; margin-bottom:4px; }
-    input[type="number"], select {
-      width:100%; padding:10px; border-radius:10px; border:1px solid #334155; background:#0a1120; color:#e5e7eb;
+    .dot:nth-child(2){ animation-delay:.15s; }
+    .dot:nth-child(3){ animation-delay:.3s; }
+    @keyframes pulse{
+      0%,60%,100%{ opacity:.3; transform:translateY(0) }
+      30%{ opacity:1; transform:translateY(-2px) }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -180,7 +165,7 @@
   <!-- Optional site JS -->
   <script src="app.js"></script>
 
-  <!-- Wiring: Worker chat + Markdown + auto card linking + hover previews + thinking animation -->
+  <!-- Worker chat + Markdown + auto card linking + hover previews + thinking animation -->
   <script>
   (function () {
     const API = "https://lexicon-proxy-holy-band-319a.biznuslobbstr.workers.dev";
@@ -204,8 +189,14 @@
       const text = (input.value || "").trim();
       if (!text) return;
       input.value = "";
-      const placeholder = appendThinking();
-      appendMessage("You", text, true);
+
+      // 1) Append USER first
+      const userBlock = appendMessage("You", text, true);
+
+      // 2) Insert THINKING bubble immediately after user's block
+      const placeholder = appendThinkingAfter(userBlock);
+
+      // 3) Send to Worker and replace in place
       sendToWorker(text, placeholder);
     });
 
@@ -224,13 +215,15 @@
       return container.innerHTML;
     }
 
-    // --- Thinking UI ---
-    function appendThinking() {
+    // --- Thinking UI (ordered after user) ---
+    function appendThinkingAfter(afterEl) {
       const wrap = document.createElement("div");
       wrap.className = "msg";
+
       const name = document.createElement("div");
       name.className = "name lexicon";
       name.textContent = "Lexicon";
+
       const body = document.createElement("div");
       body.className = "body";
       body.innerHTML = `
@@ -238,11 +231,18 @@
           thinking
           <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
         </div>`;
+
       wrap.appendChild(name);
       wrap.appendChild(body);
-      log.appendChild(wrap);
+
+      if (afterEl && afterEl.parentNode) {
+        afterEl.parentNode.insertBefore(wrap, afterEl.nextSibling);
+      } else {
+        log.appendChild(wrap);
+      }
+
       log.scrollTop = log.scrollHeight;
-      return wrap; // we'll replace this later
+      return wrap;
     }
 
     function replaceThinking(placeholderEl, markdown) {
@@ -252,6 +252,7 @@
       body.innerHTML = renderMarkdown(markdown);
       enableCardHovers(body);
       log.scrollTop = log.scrollHeight;
+      return placeholderEl;
     }
 
     // --- Messages ---
@@ -303,21 +304,11 @@
     }
 
     function autoLinkCardNames(rootEl) {
-      const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-          const p = node.parentElement;
-          if (!p) return NodeFilter.FILTER_REJECT;
-          if (p.closest("code, pre, script, style")) return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      });
-
-      const textNodes = [];
-      while (walker.nextNode()) textNodes.push(walker.currentNode);
-
+      const walker = new TreeWalker(rootEl);
+      const nodes = walker.collect();
       const MAX_VALID = 12;
-      textNodes.forEach(async node => {
+
+      nodes.forEach(async node => {
         let validationsLeft = MAX_VALID;
         const text = node.nodeValue;
         const tokens = text.split(/(\s+|[.,;:!?()–—-])/);
@@ -373,6 +364,24 @@
       });
     }
 
+    // Lightweight text-node walker
+    function TreeWalker(root) {
+      const accept = (node) => {
+        if (!node.nodeValue || !node.nodeValue.trim()) return false;
+        const p = node.parentElement;
+        if (!p) return false;
+        if (p.closest("code, pre, script, style")) return false;
+        return true;
+      };
+      this.collect = () => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+        const out = [];
+        let node;
+        while ((node = walker.nextNode())) if (accept(node)) out.push(node);
+        return out;
+      };
+    }
+
     async function loadCardImage(name) {
       const key = name.toLowerCase();
       const cached = cardCache.get(key);
@@ -382,7 +391,6 @@
     }
 
     function enableCardHovers(root) {
-      const preview = document.getElementById("preview");
       root.querySelectorAll(".card-inline[data-card]").forEach(span => {
         if (span.__hoverBound) return;
         span.__hoverBound = true;
@@ -448,9 +456,7 @@
 
     // Optional: quick health ping
     (async () => {
-      try {
-        await fetch(API + "/health").then(r => r.json());
-      } catch {}
+      try { await fetch(API + "/health").then(r => r.json()); } catch {}
     })();
   })();
   </script>
